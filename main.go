@@ -18,6 +18,8 @@ If no DIR_NAME is given, then the current directory is used as root.
 */
 package main
 
+// See here for information on getting interface info: https://golang.org/src/go/ast/ast.go
+
 import (
 	"bytes"
 	"flag"
@@ -38,6 +40,7 @@ var (
 	nofuncs    bool
 	novars     bool
 	noconsts   bool
+	noface     bool
 	unexported bool
 	norecurs   bool
 	stdout     bool
@@ -49,8 +52,9 @@ func main() {
 	flag.BoolVar(&nofuncs, "nofuncs", false, "Don't list package functions")
 	flag.BoolVar(&novars, "novars", false, "Don't list package variables")
 	flag.BoolVar(&noconsts, "noconsts", false, "Don't list package consts")
+	flag.BoolVar(&noface, "noface", false, "Don't list interfaces")
 	flag.BoolVar(&unexported, "unexported", false, "Also list unexported names")
-	flag.BoolVar(&norecurs, "norecurs", false, "Don't parse sub-directories resursively")
+	flag.BoolVar(&norecurs, "norecurs", true, "Don't parse sub-directories resursively")
 	flag.StringVar(&gofile, "gofile", "pkgreflect.go", "Name of the generated .go file")
 	flag.BoolVar(&stdout, "stdout", false, "Write to stdout.")
 	flag.Parse()
@@ -78,10 +82,14 @@ func parseDir(dir string) {
 		panic("Path is not a directory: " + dir)
 	}
 
-	pkgs, err := parser.ParseDir(token.NewFileSet(), dir, filter, 0)
+	t := token.NewFileSet()
+	pkgs, err := parser.ParseDir(t, dir, filter, 0)
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println(t)
+
 	for _, pkg := range pkgs {
 		var buf bytes.Buffer
 
@@ -123,6 +131,14 @@ func parseDir(dir string) {
 			fmt.Fprintln(&buf, "")
 		}
 
+		if !noface {
+			// Addresses of interfaces
+			fmt.Fprintln(&buf, "var Interfaces = map[string]reflect.Value{")
+			print(&buf, pkg, ast.Lbl, "\t\"%s\": reflect.ValueOf(%s),\n")
+			fmt.Fprintln(&buf, "}")
+			fmt.Fprintln(&buf, "")
+		}
+
 		if stdout {
 			io.Copy(os.Stdout, &buf)
 		} else {
@@ -155,6 +171,9 @@ func print(w io.Writer, pkg *ast.Package, kind ast.ObjKind, format string) {
 	names := []string{}
 	for _, f := range pkg.Files {
 		for name, object := range f.Scope.Objects {
+			// if ast.IsExported(name) {
+			// 	fmt.Printf("%s: %s\n", name, object.Kind)
+			// }
 			if object.Kind == kind && (unexported || ast.IsExported(name)) {
 				names = append(names, name)
 			}
