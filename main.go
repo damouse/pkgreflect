@@ -88,8 +88,6 @@ func parseDir(dir string) {
 		panic(err)
 	}
 
-	fmt.Println(t)
-
 	for _, pkg := range pkgs {
 		var buf bytes.Buffer
 
